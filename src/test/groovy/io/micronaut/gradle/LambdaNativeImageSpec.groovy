@@ -73,8 +73,12 @@ class LambdaNativeImageSpec extends AbstractGradleBuildSpec {
                 targetCompatibility = JavaVersion.toVersion('8')
             }
             
-            nativeImage {
-                main("my.own.main.class")
+            jvmNative {
+                images {
+                    main {
+                        mainClass.set("my.own.main.class")
+                    }
+                }
             }
         """
 

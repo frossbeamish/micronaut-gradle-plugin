@@ -16,6 +16,12 @@ jobs:
       matrix:
         java: ['8', '11', '15']
     steps:
+      - uses: sdkman/sdkman-action@master
+        id: sdkman
+        with:
+          candidate: java
+          version: 21.2.0.r11-grl
+      - run: java --version
       # https://github.com/actions/virtual-environments/issues/709
       - name: Free disk space
         run: |

@@ -11,14 +11,8 @@ import spock.lang.Unroll
 @Requires({ jvm.isJava11Compatible() })
 class DockerBuildTaskSpec extends AbstractGradleBuildSpec {
 
-    @Rule TemporaryFolder testProjectDir = new TemporaryFolder()
-
-    File settingsFile
-    File buildFile
-
-    def setup() {
-        settingsFile = testProjectDir.newFile('settings.gradle')
-        buildFile = testProjectDir.newFile('build.gradle')
+    static boolean isGraalVmAvailable() {
+        System.getenv("GRAALVM_HOME") != null
     }
 
     def "test build docker image"() {
@@ -63,6 +57,7 @@ class Application {
         task.outcome == TaskOutcome.SUCCESS
     }
 
+    @Requires({ graalVmAvailable })
     @Unroll
     def "test build docker native image for runtime #runtime"() {
         given:
@@ -134,13 +129,13 @@ micronaut:
 
         expect:
         dockerFile.first().startsWith(nativeImage)
-        dockerFile.find {s -> s == """HEALTHCHECK CMD curl -s localhost:8090/health | grep '"status":"UP"'""" }
+        dockerFile.find { s -> s == """HEALTHCHECK CMD curl -s localhost:8090/health | grep '"status":"UP"'""" }
         dockerFile.last().contains('ENTRYPOINT')
-        dockerFile.find {s -> s.contains('-Xmx64m')}
+        dockerFile.find { s -> s.contains('-Xmx64m') }
 
         and:
         result.output.contains("Successfully tagged hello-world:latest")
-        result.output.contains("Writing resource-config.json file")
+        result.output.contains("Resources configuration written into")
         task.outcome == TaskOutcome.SUCCESS
 
         where:
@@ -151,6 +146,7 @@ micronaut:
     }
 
 
+    @Requires({ graalVmAvailable })
     def "test build docker native image for lambda with custom main"() {
         given:
         settingsFile << "rootProject.name = 'hello-world'"
@@ -168,8 +164,12 @@ micronaut:
                 mavenCentral()
             }
             
-            nativeImage {
-                main = "other.Application"
+            jvmNative {
+                images {
+                    main {
+                        mainClass =  "other.Application"
+                    }
+                }
             }
             
             java {
@@ -219,10 +219,14 @@ class Application {
                 mavenCentral()
             }
             
-            nativeImage {
-                main = "other.Application"
+            jvmNative {
+                images {
+                    main {
+                        mainClass =  "other.Application"
+                    }
+                }
             }
-            
+                    
             java {
                 sourceCompatibility = JavaVersion.toVersion('8')
                 targetCompatibility = JavaVersion.toVersion('8')
@@ -269,13 +273,13 @@ class Application {
         dockerFile.first() == ('FROM test_base_image_jvm')
         dockerFile.find { s -> s == """HEALTHCHECK CMD curl -s localhost:8090/health | grep '"status":"UP"'""" }
         dockerFile.last().contains('ENTRYPOINT')
-        dockerFile.find {s -> s.contains('-Xmx64m')}
+        dockerFile.find { s -> s.contains('-Xmx64m') }
 
         and:
         dockerFileNative.find() { s -> s == 'FROM test_base_image_docker' }
         dockerFileNative.find { s -> s == """HEALTHCHECK CMD curl -s localhost:8090/health | grep '"status":"UP"'""" }
         dockerFile.last().contains('ENTRYPOINT')
-        dockerFileNative.find {s -> s.contains('-Xmx64m')}
+        dockerFileNative.find { s -> s.contains('-Xmx64m') }
 
         where:
         runtime  | nativeImage
@@ -284,6 +288,7 @@ class Application {
         "jetty"  | 'FROM ghcr.io/graalvm/graalvm-ce:java'
     }
 
+    @Requires({ graalVmAvailable })
     @Unroll
     void 'build mostly static native images when using distroless docker image for runtime=#runtime'() {
         given:
@@ -327,13 +332,14 @@ class Application {
         dockerfileNativeTask.outcome == TaskOutcome.SUCCESS
 
         and:
-        dockerFileNative.find {s -> s.contains('FROM gcr.io/distroless/cc-debian10')}
-        dockerFileNative.find {s -> s.contains('-H:+StaticExecutableWithDynamicLibC')}
+        dockerFileNative.find { s -> s.contains('FROM gcr.io/distroless/cc-debian10') }
+        dockerFileNative.find { s -> s.contains('-H:+StaticExecutableWithDynamicLibC') }
 
         where:
         runtime << ['netty', 'lambda']
     }
 
+    @Requires({ graalVmAvailable })
     void 'use alpine-glibc by default and do not build mostly static native images'() {
         given:
         settingsFile << "rootProject.name = 'hello-world'"
@@ -371,8 +377,8 @@ class Application {
         dockerfileNativeTask.outcome == TaskOutcome.SUCCESS
 
         and:
-        dockerFileNative.find {s -> s.contains('FROM frolvlad/alpine-glibc:alpine-3.12')}
-        dockerFileNative.find {s -> !s.contains('-H:+StaticExecutableWithDynamicLibC')}
+        dockerFileNative.find { s -> s.contains('FROM frolvlad/alpine-glibc:alpine-3.12') }
+        dockerFileNative.find { s -> !s.contains('-H:+StaticExecutableWithDynamicLibC') }
     }
 
     void 'do not use alpine-glibc for lambda runtime'() {
@@ -412,8 +418,8 @@ class Application {
         dockerfileNativeTask.outcome == TaskOutcome.SUCCESS
 
         and:
-        dockerFileNative.find {s -> !s.contains('FROM frolvlad/alpine-glibc:alpine-3.12')}
-        dockerFileNative.find {s -> !s.contains('-H:+StaticExecutableWithDynamicLibC')}
+        dockerFileNative.find { s -> !s.contains('FROM frolvlad/alpine-glibc:alpine-3.12') }
+        dockerFileNative.find { s -> !s.contains('-H:+StaticExecutableWithDynamicLibC') }
     }
 
     @Issue('https://github.com/micronaut-projects/micronaut-gradle-plugin/issues/161')
